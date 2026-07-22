@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="ルーレット" />
+<meta name="theme-color" content="#E06E6E" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23E06E6E'/%3E%3Cstop offset='1' stop-color='%23E8C94A'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Ctext x='32' y='34' font-family='Arial,sans-serif' font-size='44' font-weight='bold' fill='white' text-anchor='middle' dominant-baseline='central'%3ER%3C/text%3E%3C/svg%3E" />
+<title>ルーレット</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #F2F2F7;
+    --card: #FFFFFF;
+    --ink: #1a1a1a;
+    --secondary: rgba(60,60,67,0.6);
+    --tertiary: rgba(60,60,67,0.3);
+    --sep: rgba(60,60,67,0.18);
+    --blue: #007AFF;
+    --red: #FF3B30;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+    color: var(--ink); font-size: 16px; -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  #app {
+    height: var(--app-height, 100%);
+    display: flex; flex-direction: column;
+    padding-top: var(--safe-top);
+    transition: height 0.15s ease-out;
+  }
+
+  /* ---------- 入力エリア ---------- */
+  #inputs { padding: 14px 18px 4px; display: flex; flex-direction: column; gap: 8px; }
+  .choice-row { display: flex; align-items: center; gap: 10px; }
+  .choice-row .dot { width: 14px; min-width: 14px; height: 14px; border-radius: 50%; }
+  .choice-input {
+    flex: 1; height: 46px; border: 0; background: var(--card); border-radius: 14px;
+    font-family: inherit; font-size: 16px; color: var(--ink);
+    padding: 0 14px; outline: none; min-width: 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }
+  .choice-input::placeholder { color: var(--tertiary); font-weight: 600; }
+  .row-btn {
+    width: 36px; min-width: 36px; height: 36px; border: 0; background: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; color: var(--red);
+  }
+  #addRow {
+    height: 40px; border: 1.5px dashed var(--tertiary); border-radius: 14px;
+    background: none; cursor: pointer; font-family: inherit; font-size: 14px;
+    color: var(--blue); font-weight: 500; margin-left: 24px;
+  }
+
+  /* ---------- ホイール ---------- */
+  #wheelArea {
+    flex: 1; min-height: 0; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px 8px 8px;
+  }
+  #wheelWrap { position: relative; width: min(90vw, 60vh); aspect-ratio: 1; }
+  #pointer {
+    position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    z-index: 5; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.18));
+  }
+  #wheelPlate {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: #fff; box-shadow: 0 10px 34px rgba(0,0,0,0.10);
+  }
+  #wheelSvg {
+    position: absolute; inset: 3.5%;
+    width: 93%; height: 93%; display: block;
+    will-change: transform;
+  }
+  #startBtn {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 27%; aspect-ratio: 1; border-radius: 50%;
+    background: #fff; border: 0; cursor: pointer; z-index: 4;
+    font-family: inherit; font-weight: 700; color: var(--blue);
+    font-size: clamp(15px, 4.6vw, 24px); letter-spacing: 0.04em;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+  }
+  #startBtn:active { transform: translate(-50%, -50%) scale(0.95); }
+  #startBtn:disabled { color: var(--tertiary); }
+
+  #versionLabel { text-align: center; font-size: 11px; color: var(--tertiary); padding: 6px 0 calc(var(--safe-bottom) + 8px); }
+
+  /* キーボード表示中はホイールを縮めて入力欄を見やすく */
+  body.keyboard-open #wheelArea { padding-top: 6px; }
+
+  /* ---------- 結果 ---------- */
+  #resultOverlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  #resultOverlay.show { opacity: 1; pointer-events: auto; }
+  #resultCard {
+    background: var(--card); border-radius: 22px; padding: 30px 28px 22px;
+    width: min(78vw, 320px); text-align: center;
+    transform: scale(0.9); transition: transform 0.25s cubic-bezier(.34,1.5,.64,1);
+    box-shadow: 0 16px 50px rgba(0,0,0,0.22);
+  }
+  #resultOverlay.show #resultCard { transform: scale(1); }
+  #resultChip {
+    display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    margin-bottom: 10px;
+  }
+  #resultText { font-size: 32px; font-weight: 700; margin-bottom: 22px; word-break: break-word; }
+  .result-actions { display: flex; gap: 10px; }
+  .result-actions button {
+    flex: 1; height: 46px; border-radius: 14px; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 15px; font-weight: 600;
+  }
+  #againBtn { background: var(--bg); color: var(--ink); }
+  #closeResultBtn { background: var(--blue); color: #fff; }
+
+  /* 更新バナー */
+  #updateBanner {
+    position: fixed; left: 12px; right: 12px;
+    bottom: calc(var(--safe-bottom) + 16px); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--blue); color: #fff; border: 0; border-radius: 14px;
+    padding: 14px 18px; font-family: inherit; font-size: 14px; font-weight: 600;
+    box-shadow: 0 8px 28px rgba(0,122,255,0.4); cursor: pointer;
+    transform: translateY(140%); transition: transform 0.35s cubic-bezier(.32,.72,0,1);
+  }
+  #updateBanner.show { transform: translateY(0); }
+  #updateBanner svg { display: block; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="inputs"></div>
+  <div id="wheelArea">
+    <div id="wheelWrap">
+      <div id="pointer">
+        <svg width="52" height="46" viewBox="0 0 52 46"><path d="M4 3 h44 l-19.4 38.5 a3 3 0 0 1-5.2 0 Z" fill="#fff" stroke="#b9b9be" stroke-width="2.5" stroke-linejoin="round"/></svg>
+      </div>
+      <div id="wheelPlate"></div>
+      <svg id="wheelSvg" viewBox="0 0 200 200"></svg>
+      <button id="startBtn">START</button>
+    </div>
+  </div>
+  <div id="versionLabel"></div>
+</div>
+
+<!-- 結果 -->
+<div id="resultOverlay">
+  <div id="resultCard">
+    <span id="resultChip"></span>
+    <div id="resultText"></div>
+    <div class="result-actions">
+      <button id="againBtn">もう一度</button>
+      <button id="closeResultBtn">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------- helper ----------
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // ---------- バージョン ----------
+  // リリースのたびに sw.js の CACHE 名とセットで上げる。
+  const APP_VERSION = '2.1.0';
+
+  // ---------- 定数 ----------
+  const COLORS = ['#E06E6E', '#E8C94A', '#5AB98A', '#5B9BD5'];
+  const DEFAULTS = ['A', 'B', 'C', 'D'];
+  const MAX = 4;
+
+  // ---------- State（保存なし・毎回リセット） ----------
+  const state = {
+    labels: ['', ''],   // 入力値（空ならA/B/Cを使う）
+    rotation: 0,
+    spinning: false,
+  };
+
+  const displayLabels = () => state.labels.map((l, i) => l.trim() || DEFAULTS[i]);
+
+  // ---------- 入力エリア ----------
+  function renderInputs() {
+    const el = $('#inputs');
+    const n = state.labels.length;
+    let html = state.labels.map((l, i) => `
+      <div class="choice-row">
+        <span class="dot" style="background:${COLORS[i]}"></span>
+        <input class="choice-input" data-i="${i}" type="text" value="${esc(l)}" placeholder="${DEFAULTS[i]}" enterkeyhint="done" />
+        ${i >= 2 ? `<button class="row-btn remove-row" data-i="${i}" aria-label="この選択肢を消す">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9.2"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>
+        </button>` : ''}
+      </div>`).join('');
+    if (n < MAX) html += `<button id="addRow">＋ 選択肢を追加</button>`;
+    el.innerHTML = html;
+
+    el.querySelectorAll('.choice-input').forEach((inp) => {
+      inp.addEventListener('input', (e) => {
+        state.labels[+e.target.dataset.i] = e.target.value;
+        renderWheel();
+      });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+    });
+    const add = el.querySelector('#addRow');
+    if (add) add.addEventListener('click', () => { state.labels.push(''); renderAll(); });
+    el.querySelectorAll('.remove-row').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.labels.splice(+btn.dataset.i, 1);
+        renderAll();
+      });
+    });
+  }
+
+  // ---------- ホイール描画 ----------
+  function polar(cx, cy, r, deg) {
+    const rad = (deg - 90) * Math.PI / 180; // 0deg = 真上
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  }
+
+  function renderWheel() {
+    const svg = $('#wheelSvg');
+    const labels = displayLabels();
+    const n = labels.length;
+    const cx = 100, cy = 100, r = 100;
+    const seg = 360 / n;
+    let html = '';
+    for (let i = 0; i < n; i++) {
+      const a0 = i * seg, a1 = (i + 1) * seg;
+      const [x0, y0] = polar(cx, cy, r, a0);
+      const [x1, y1] = polar(cx, cy, r, a1);
+      const large = seg > 180 ? 1 : 0;
+      html += `<path d="M${cx},${cy} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z" fill="${COLORS[i]}" stroke="#fff" stroke-width="1"/>`;
+      const mid = a0 + seg / 2;
+      const [tx, ty] = polar(cx, cy, r * 0.62, mid);
+      const label = esc(labels[i]);
+      const fontSize = label.length <= 4 ? 14 : label.length <= 8 ? 11 : 9;
+      html += `<text x="${tx.toFixed(2)}" y="${ty.toFixed(2)}" transform="rotate(${(mid + 90).toFixed(2)} ${tx.toFixed(2)} ${ty.toFixed(2)})" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}" font-weight="600" fill="#1a1a1a" font-family="inherit">${label}</text>`;
+    }
+    svg.innerHTML = html;
+    svg.style.transition = 'none';
+    svg.style.transform = `rotate(${state.rotation}deg)`;
+  }
+
+  function renderAll() { renderInputs(); renderWheel(); }
+
+  // ---------- 回転 ----------
+  function spin() {
+    if (state.spinning) return;
+    document.activeElement && document.activeElement.blur && document.activeElement.blur();
+    state.spinning = true;
+    $('#startBtn').disabled = true;
+
+    const labels = displayLabels();
+    const n = labels.length;
+    const seg = 360 / n;
+    const winner = Math.floor(Math.random() * n);
+    // 針は真上(0deg)。当選扇の中央が真上に来る回転角に、扇内±40%のランダムずれを加える。
+    const jitter = (Math.random() - 0.5) * seg * 0.8;
+    const target = -(winner * seg + seg / 2 + jitter);
+    const current = ((state.rotation % 360) + 360) % 360;
+    const targetNorm = ((target % 360) + 360) % 360;
+    const delta = ((targetNorm - current) % 360 + 360) % 360;
+    state.rotation += 5 * 360 + delta;
+
+    const svg = $('#wheelSvg');
+    svg.style.transition = 'transform 4.2s cubic-bezier(0.16, 0.84, 0.12, 1)';
+    void svg.getBoundingClientRect();
+    svg.style.transform = `rotate(${state.rotation}deg)`;
+
+    const onEnd = () => {
+      svg.removeEventListener('transitionend', onEnd);
+      state.spinning = false;
+      $('#startBtn').disabled = false;
+      showResult(labels[winner], COLORS[winner]);
+    };
+    svg.addEventListener('transitionend', onEnd);
+  }
+
+  function showResult(label, color) {
+    $('#resultChip').style.background = color;
+    $('#resultText').textContent = label;
+    $('#resultOverlay').classList.add('show');
+  }
+  function hideResult() { $('#resultOverlay').classList.remove('show'); }
+
+  // ---------- バインド・起動 ----------
+  $('#startBtn').addEventListener('click', spin);
+  $('#againBtn').addEventListener('click', () => { hideResult(); setTimeout(spin, 250); });
+  $('#closeResultBtn').addEventListener('click', hideResult);
+  $('#resultOverlay').addEventListener('click', (e) => { if (e.target.id === 'resultOverlay') hideResult(); });
+
+  setupViewportTracking();
+  renderAll();
+  document.getElementById('versionLabel').textContent = 'v' + APP_VERSION;
+
+  // ---------- visualViewport（キーボード対策） ----------
+  function setupViewportTracking() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    let baseHeight = vv.height;
+    function apply() {
+      root.style.setProperty('--app-height', vv.height + 'px');
+      document.body.classList.toggle('keyboard-open', vv.height < baseHeight - 120);
+    }
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    window.addEventListener('orientationchange', () => { setTimeout(() => { baseHeight = vv.height; apply(); }, 300); });
+    apply();
+  }
+
+  // ---------- Service Worker + 自動アップデート ----------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        const swUrl = new URL('sw.js', location.href).href;
+        const res = await fetch(swUrl, { method: 'HEAD' });
+        if (!res.ok) return;
+        const reg = await navigator.serviceWorker.register('sw.js');
+        if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner(sw);
+          });
+        });
+        reg.update();
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return; refreshing = true; window.location.reload();
+        });
+      } catch (e) {}
+    });
+  }
+  function showUpdateBanner(waitingSW) {
+    if (document.getElementById('updateBanner')) return;
+    const b = document.createElement('button');
+    b.id = 'updateBanner';
+    b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg><span>新しいバージョンがあります — タップで更新</span>';
+    b.addEventListener('click', () => {
+      b.disabled = true; b.querySelector('span').textContent = '更新中…';
+      waitingSW.postMessage('SKIP_WAITING');
+    });
+    document.body.appendChild(b);
+    requestAnimationFrame(() => b.classList.add('show'));
+  }
+</script>
+</body>
+</html>
