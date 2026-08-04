@@ -94,6 +94,9 @@
   }
   #startBtn:active { transform: translate(-50%, -50%) scale(0.95); }
   #startBtn:disabled { color: var(--tertiary); }
+  #startBtn.stop { color: var(--red); }
+  .choice-input:disabled { opacity: 0.5; }
+  #addRow:disabled, .row-btn:disabled { opacity: 0.4; }
 
   #versionLabel { text-align: center; font-size: 11px; color: var(--tertiary); padding: 6px 0 calc(var(--safe-bottom) + 8px); }
 
@@ -177,7 +180,7 @@
 
   // ---------- バージョン ----------
   // リリースのたびに sw.js の CACHE 名とセットで上げる。
-  const APP_VERSION = '2.1.0';
+  const APP_VERSION = '2.2.0';
 
   // ---------- 定数 ----------
   const COLORS = ['#E06E6E', '#E8C94A', '#5AB98A', '#5B9BD5'];
@@ -186,10 +189,12 @@
 
   // ---------- State（保存なし・毎回リセット） ----------
   const state = {
-    labels: ['', ''],   // 入力値（空ならA/B/Cを使う）
+    labels: ['', ''],   // 入力値（空ならA/B/C/Dを使う）
     rotation: 0,
-    spinning: false,
+    phase: 'idle',      // idle | spinning | stopping
   };
+  let rafId = null;
+  const SPIN_SPEED = 11; // deg/frame（等速回転の速さ）
 
   const displayLabels = () => state.labels.map((l, i) => l.trim() || DEFAULTS[i]);
 
@@ -197,15 +202,16 @@
   function renderInputs() {
     const el = $('#inputs');
     const n = state.labels.length;
+    const locked = state.phase !== 'idle';
     let html = state.labels.map((l, i) => `
       <div class="choice-row">
         <span class="dot" style="background:${COLORS[i]}"></span>
-        <input class="choice-input" data-i="${i}" type="text" value="${esc(l)}" placeholder="${DEFAULTS[i]}" enterkeyhint="done" />
-        ${i >= 2 ? `<button class="row-btn remove-row" data-i="${i}" aria-label="この選択肢を消す">
+        <input class="choice-input" data-i="${i}" type="text" value="${esc(l)}" placeholder="${DEFAULTS[i]}" enterkeyhint="done" ${locked ? 'disabled' : ''} />
+        ${i >= 2 ? `<button class="row-btn remove-row" data-i="${i}" aria-label="この選択肢を消す" ${locked ? 'disabled' : ''}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9.2"/><line x1="8.5" y1="12" x2="15.5" y2="12"/></svg>
         </button>` : ''}
       </div>`).join('');
-    if (n < MAX) html += `<button id="addRow">＋ 選択肢を追加</button>`;
+    if (n < MAX) html += `<button id="addRow" ${locked ? 'disabled' : ''}>＋ 選択肢を追加</button>`;
     el.innerHTML = html;
 
     el.querySelectorAll('.choice-input').forEach((inp) => {
@@ -257,35 +263,69 @@
 
   function renderAll() { renderInputs(); renderWheel(); }
 
-  // ---------- 回転 ----------
-  function spin() {
-    if (state.spinning) return;
-    document.activeElement && document.activeElement.blur && document.activeElement.blur();
-    state.spinning = true;
-    $('#startBtn').disabled = true;
+  // ---------- 回転（START→等速回転→STOPで減速停止） ----------
+  function updateStartBtn() {
+    const b = $('#startBtn');
+    if (state.phase === 'idle') {
+      b.textContent = 'START'; b.classList.remove('stop'); b.disabled = false;
+    } else if (state.phase === 'spinning') {
+      b.textContent = 'STOP'; b.classList.add('stop'); b.disabled = false;
+    } else { // stopping
+      b.textContent = 'STOP'; b.classList.add('stop'); b.disabled = true;
+    }
+  }
 
-    const labels = displayLabels();
-    const n = labels.length;
-    const seg = 360 / n;
-    const winner = Math.floor(Math.random() * n);
-    // 針は真上(0deg)。当選扇の中央が真上に来る回転角に、扇内±40%のランダムずれを加える。
-    const jitter = (Math.random() - 0.5) * seg * 0.8;
-    const target = -(winner * seg + seg / 2 + jitter);
-    const current = ((state.rotation % 360) + 360) % 360;
-    const targetNorm = ((target % 360) + 360) % 360;
-    const delta = ((targetNorm - current) % 360 + 360) % 360;
-    state.rotation += 5 * 360 + delta;
+  function onStartBtn() {
+    if (state.phase === 'idle') startSpin();
+    else if (state.phase === 'spinning') stopSpin();
+    // stopping中は無効
+  }
+
+  function startSpin() {
+    document.activeElement && document.activeElement.blur && document.activeElement.blur();
+    state.phase = 'spinning';
+    renderInputs();      // 入力欄をロック
+    updateStartBtn();
 
     const svg = $('#wheelSvg');
-    svg.style.transition = 'transform 4.2s cubic-bezier(0.16, 0.84, 0.12, 1)';
+    svg.style.transition = 'none';
+    const tick = () => {
+      state.rotation += SPIN_SPEED;
+      svg.style.transform = `rotate(${state.rotation}deg)`;
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function stopSpin() {
+    if (state.phase !== 'spinning') return;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    state.phase = 'stopping';
+    updateStartBtn();
+
+    // 止めた瞬間から余韻ぶん（1.5〜2.5回転）回して減速停止 → 狙い撃ち防止
+    const extra = 360 * (1.5 + Math.random());
+    const target = state.rotation + extra;
+    state.rotation = target;
+
+    const svg = $('#wheelSvg');
+    svg.style.transition = 'transform 2.6s cubic-bezier(0.16, 0.84, 0.12, 1)';
     void svg.getBoundingClientRect();
-    svg.style.transform = `rotate(${state.rotation}deg)`;
+    svg.style.transform = `rotate(${target}deg)`;
 
     const onEnd = () => {
       svg.removeEventListener('transitionend', onEnd);
-      state.spinning = false;
-      $('#startBtn').disabled = false;
-      showResult(labels[winner], COLORS[winner]);
+      state.phase = 'idle';
+      renderInputs();    // 入力欄ロック解除
+      updateStartBtn();
+      // 針(真上)の下にある扇を、着地角度から逆算
+      const labels = displayLabels();
+      const n = labels.length;
+      const seg = 360 / n;
+      const norm = ((target % 360) + 360) % 360;
+      const under = ((-norm) % 360 + 360) % 360;
+      const idx = Math.floor(under / seg) % n;
+      showResult(labels[idx], COLORS[idx]);
     };
     svg.addEventListener('transitionend', onEnd);
   }
@@ -298,8 +338,8 @@
   function hideResult() { $('#resultOverlay').classList.remove('show'); }
 
   // ---------- バインド・起動 ----------
-  $('#startBtn').addEventListener('click', spin);
-  $('#againBtn').addEventListener('click', () => { hideResult(); setTimeout(spin, 250); });
+  $('#startBtn').addEventListener('click', onStartBtn);
+  $('#againBtn').addEventListener('click', () => { hideResult(); setTimeout(startSpin, 250); });
   $('#closeResultBtn').addEventListener('click', hideResult);
   $('#resultOverlay').addEventListener('click', (e) => { if (e.target.id === 'resultOverlay') hideResult(); });
 
