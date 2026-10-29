@@ -144,6 +144,7 @@
   #updateBanner.show { transform: translateY(0); }
   #updateBanner svg { display: block; flex-shrink: 0; }
 </style>
+<script>/* iPhoneが容量不足のときに保存データを消さないよう、端末にお願いしておく */try{navigator.storage&&navigator.storage.persist&&navigator.storage.persisted().then(function(p){if(!p)navigator.storage.persist();});}catch(e){}</script>
 </head>
 <body>
 <div id="app">
@@ -180,7 +181,7 @@
 
   // ---------- バージョン ----------
   // リリースのたびに sw.js の CACHE 名とセットで上げる。
-  const APP_VERSION = '2.3.0';
+  const APP_VERSION = '2.4.0';
 
   // ---------- 定数 ----------
   const COLORS = ['#E06E6E', '#E8C94A', '#5AB98A', '#5B9BD5'];
